@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hive Metastore to Unity Catalog: User-Asset Migration Runbook</title>
+<style>
+  :root{
+    --red:#FF3621; --ink:#1B3139; --slate:#445; --muted:#6b7785;
+    --bg:#ffffff; --panel:#f6f8fa; --line:#e3e8ee; --code:#0b2530; --codebg:#f3f5f7;
+    --green:#1a7f5a; --amber:#9a6b00; --blue:#1f6feb;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       color:var(--ink);background:var(--bg);line-height:1.6;font-size:16px}
+  .layout{display:flex;align-items:flex-start}
+  nav.toc{position:sticky;top:0;height:100vh;min-width:286px;max-width:286px;overflow-y:auto;
+          background:var(--ink);color:#cdd9e0;padding:24px 18px;font-size:13px}
+  nav.toc h2{color:#fff;font-size:14px;letter-spacing:.04em;text-transform:uppercase;margin:0 0 4px}
+  nav.toc .sub{color:#7d909b;font-size:11px;margin-bottom:18px}
+  nav.toc a{display:block;color:#cdd9e0;text-decoration:none;padding:5px 8px;border-radius:6px;margin:1px 0}
+  nav.toc a:hover{background:#2a4651;color:#fff}
+  nav.toc a.step{border-left:3px solid var(--red);padding-left:10px;margin-left:2px}
+  nav.toc .grouptitle{color:#5f7682;font-size:10px;text-transform:uppercase;letter-spacing:.08em;margin:16px 0 4px 8px}
+  main{flex:1;max-width:980px;margin:0 auto;padding:48px 56px 120px}
+  header.hero{border-bottom:4px solid var(--red);padding-bottom:24px;margin-bottom:8px}
+  header.hero .tag{display:inline-block;background:var(--red);color:#fff;font-size:11px;font-weight:700;
+                   letter-spacing:.08em;text-transform:uppercase;padding:4px 10px;border-radius:4px}
+  header.hero h1{font-size:34px;line-height:1.15;margin:14px 0 6px}
+  header.hero p.lede{font-size:18px;color:var(--slate);margin:0}
+  header.hero .meta{margin-top:14px;font-size:13px;color:var(--muted)}
+  h2.section{font-size:26px;margin:54px 0 6px;padding-top:12px;border-top:1px solid var(--line)}
+  h3{font-size:19px;margin:30px 0 6px;color:var(--ink)}
+  h4{font-size:15px;margin:20px 0 4px;color:var(--slate);text-transform:uppercase;letter-spacing:.03em}
+  p,li{color:#243b44}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:13.5px;
+       background:var(--codebg);padding:1px 5px;border-radius:4px;color:#0b2530}
+  pre{background:var(--code);color:#e7eef2;border-radius:10px;padding:16px 18px;overflow-x:auto;font-size:13px;
+      line-height:1.55;border:1px solid #0a1c24}
+  pre code{background:none;color:inherit;padding:0;font-size:13px}
+  .pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;vertical-align:middle}
+  .pill.ok{background:#e4f5ee;color:var(--green)} .pill.warn{background:#fbf0d9;color:var(--amber)}
+  .pill.in{background:#e7f0ff;color:var(--blue)}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:13.5px;display:block;overflow-x:auto}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:var(--panel);font-weight:700;color:var(--ink)}
+  tr:nth-child(even) td{background:#fbfcfd}
+  .callout{border-radius:10px;padding:14px 16px;margin:16px 0;font-size:14.5px;border:1px solid}
+  .callout.note{background:#eef6ff;border-color:#cfe2ff}
+  .callout.proof{background:#e9f7f0;border-color:#bfe6d4}
+  .callout.warn{background:#fdf4e3;border-color:#f0dcae}
+  .callout b{display:block;margin-bottom:4px}
+  .step-badge{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;
+              background:var(--red);color:#fff;font-weight:700;font-size:15px;margin-right:10px;vertical-align:middle}
+  .flow{display:flex;flex-direction:column;gap:0;margin:22px 0}
+  .flow .node{background:var(--panel);border:1px solid var(--line);border-left:5px solid var(--red);
+              border-radius:8px;padding:12px 16px}
+  .flow .node b{color:var(--ink)} .flow .node span{color:var(--muted);font-size:13px}
+  .flow .arrow{align-self:center;color:var(--red);font-size:20px;line-height:1;margin:4px 0}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .card{border:1px solid var(--line);border-radius:10px;padding:14px 16px;background:#fff}
+  .card h4{margin-top:0}
+  .small{font-size:13px;color:var(--muted)}
+  hr{border:none;border-top:1px solid var(--line);margin:40px 0}
+  .footer{margin-top:60px;padding-top:20px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
+  @media (max-width:880px){nav.toc{display:none} main{padding:28px 20px}}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="toc">
+  <h2>HMS to UC Runbook</h2>
+  <div class="sub">User-asset migration, operational guide</div>
+
+  <div class="grouptitle">Orientation</div>
+  <a href="#what">What this is</a>
+  <a href="#halves">The two halves of UC migration</a>
+  <a href="#tables">The control tables</a>
+  <a href="#arch">The flow at a glance</a>
+
+  <div class="grouptitle">The flow, step by step</div>
+  <a class="step" href="#step0">0. One-time setup</a>
+  <a class="step" href="#step1">1. Seed the mapping</a>
+  <a class="step" href="#step2">2. (Optional) seed a demo estate</a>
+  <a class="step" href="#step3">3. Discover</a>
+  <a class="step" href="#step4">4. Scan and propose</a>
+  <a class="step" href="#step5">5. Review and approve</a>
+  <a class="step" href="#step6">6. Apply</a>
+  <a class="step" href="#step7">7. Validate and record</a>
+  <a class="step" href="#step8">8. Iterate or extend</a>
+  <a class="step" href="#step9">9. Roll out across the estate</a>
+
+  <div class="grouptitle">Reference</div>
+  <a href="#kinds">Reference kinds and scoring</a>
+  <a href="#routing">Review routing</a>
+  <a href="#recon">Reconciliation layers</a>
+  <a href="#trouble">Troubleshooting</a>
+  <a href="#faq">FAQ</a>
+  <a href="#keyfiles">Key files</a>
+</nav>
+
+<main>
+<header class="hero">
+  <span class="tag">Migration Runbook</span>
+  <h1>Hive Metastore to Unity Catalog: User-Asset Migration</h1>
+  <p class="lede">How an existing estate of notebooks, dashboards, and mount references is converted from Hive Metastore to Unity Catalog: discovered, scored, reviewed, patched, and reconciled, one stage at a time.</p>
+  <div class="meta">Operational companion to the migration toolkit (the <code>databricks-hms-uc-migration</code> package). Every step maps to a script you run. v1.0.0.</div>
+</header>
+
+<section id="what">
+<h2 class="section">What this is</h2>
+<p>This is the operational guide to the toolkit that migrates <b>user assets</b> from Hive Metastore (HMS) to Unity Catalog (UC). It does not migrate tables. It migrates the code and dashboards that <i>reference</i> those tables: the hard-coded <code>hive_metastore</code> table names and <code>/mnt/...</code> mount paths scattered across notebooks and dashboards that break the moment the underlying tables move.</p>
+<p>The toolkit gives you five things, one per stage. A discovery job that inventories your assets and mounts. A scanner that parses each asset, finds every HMS reference, proposes the UC replacement, and scores how confident it is. A tiered review workflow so a human approves the changes, spending effort only where it is needed. An apply job that backs up and patches the assets in place. And a validation job that reconciles before and after and records every decision.</p>
+<div class="callout note">
+  <b>Who this is for</b>
+  The engineer running the migration on an estate, and anyone covering it. It assumes a Databricks workspace with Unity Catalog, a SQL warehouse, and the ability to run Python (locally with the CLI profile, or as workspace jobs).
+</div>
+</section>
+
+<section id="halves">
+<h2 class="section">The two halves of UC migration</h2>
+<p>The single most common point of confusion is what this tool does and does not do. UC migration has two halves, and they are separate jobs.</p>
+<div class="grid2">
+  <div class="card">
+    <h4>1. The metastore objects</h4>
+    <p>Moving the tables, grants, and the HMS-to-UC table mapping itself. This is handled by your existing table-migration tooling (for example UCX). <b>This toolkit does not do this.</b></p>
+  </div>
+  <div class="card">
+    <h4>2. The user assets</h4>
+    <p>The notebooks, dashboards, and scripts that still reference the old tables and mount paths. When the tables move, this code breaks. <b>This is what this toolkit migrates.</b></p>
+  </div>
+</div>
+<p>The link between the two is the <code>hms_to_uc_mapping</code> table: the answer key that says <code>sales_db.transactions</code> now lives at <code>analytics.sales.transactions</code>. In production you populate it from your table-migration output (for example UCX's table mapping). For a trial you seed it directly. It is read at scan time only. It does not move data.</p>
+</section>
+
+<section id="tables">
+<h2 class="section">The control tables</h2>
+<p>All state lives in four Delta tables in one UC schema (<code>&lt;catalog&gt;.&lt;schema&gt;</code>). You create them once in Step 0.</p>
+<table>
+  <tr><th>Table</th><th>Written by</th><th>Holds</th></tr>
+  <tr><td><code>hms_to_uc_mapping</code></td><td>You (or your table-migration output)</td><td>The HMS-to-UC answer key</td></tr>
+  <tr><td><code>mount_point_registry</code></td><td>Stage 1 Discovery</td><td>One row per mount point, linked to a namespace</td></tr>
+  <tr><td><code>demo_asset_inventory</code></td><td>Stage 1 (or the seed step)</td><td>One row per asset in scope</td></tr>
+  <tr><td><code>migration_manifest</code></td><td>Stage 2 Scan, updated by Review, Apply, Validate</td><td>One row per HMS reference found: original, proposal, confidence, status</td></tr>
+</table>
+<p>The <code>migration_manifest</code> is the spine of the whole flow. Every later stage reads and updates it. Its <code>status</code> moves <code>proposed</code> &#8594; <code>approved</code> / <code>overridden</code> / <code>skipped</code> &#8594; <code>applied</code> / <code>failed</code>.</p>
+</section>
+
+<section id="arch">
+<h2 class="section">The flow at a glance</h2>
+<div class="flow">
+  <div class="node"><b>Stage 1: Discover</b> <span>enumerate notebooks, dashboards, mounts &#8594; <code>mount_point_registry</code>, <code>demo_asset_inventory</code></span></div>
+  <div class="arrow">&#8595;</div>
+  <div class="node"><b>Stage 2: Scan and propose</b> <span>parse each asset, find references, propose UC targets, score confidence &#8594; <code>migration_manifest</code> (proposed)</span></div>
+  <div class="arrow">&#8595;</div>
+  <div class="node"><b>Stage 3: Review</b> <span>human approves, by tier &#8594; manifest status + final replacement</span></div>
+  <div class="arrow">&#8595;</div>
+  <div class="node"><b>Stage 4: Apply</b> <span>back up, patch source, re-import &#8594; assets migrated, manifest applied</span></div>
+  <div class="arrow">&#8595;</div>
+  <div class="node"><b>Stage 5: Validate and record</b> <span>reconcile pre/post, log every decision &#8594; mismatches flagged, audit trail</span></div>
+</div>
+<p class="small">Stages 1, 2, 4, 5 are scripts you run (as workspace jobs or locally). Stage 3 is interactive: notebooks plus a Genie Code skill, driven by a human reviewer.</p>
+</section>
+
+<section id="step0">
+<h2 class="section"><span class="step-badge">0</span>One-time setup</h2>
+<p>Do this once per workspace, before your first migration run.</p>
+
+<h3>0.1 Get the toolkit</h3>
+<p>Clone the toolkit locally for command-line runs, or add it as a workspace Git folder to run the stages as jobs. The runnable code lives under <code>scripts/</code> (the stage jobs, the scanner, the seed, the review notebooks) with a <code>databricks.yml</code> bundle.</p>
+<pre><code># local
+git clone &lt;your_toolkit_repo&gt; databricks-hms-uc-migration
+cd databricks-hms-uc-migration
+pip install databricks-sdk sqlglot mlflow ipywidgets</code></pre>
+<p>In Databricks for the jobs path: Workspace, then your user, then Add, then Git folder, then paste the repository URL.</p>
+
+<h3>0.2 Create the schema and control tables</h3>
+<p>One schema, four tables. Run this SQL once. (DDL is also in <code>references/pipeline-stages.md</code>.)</p>
+<pre><code>CREATE SCHEMA IF NOT EXISTS &lt;catalog&gt;.&lt;schema&gt;;
+
+CREATE TABLE IF NOT EXISTS &lt;catalog&gt;.&lt;schema&gt;.hms_to_uc_mapping (
+  hms_namespace STRING, hms_table STRING,
+  uc_catalog STRING, uc_schema STRING, uc_table STRING,
+  mount_path STRING, notes STRING) USING DELTA;
+
+CREATE TABLE IF NOT EXISTS &lt;catalog&gt;.&lt;schema&gt;.mount_point_registry (
+  mount_path STRING, adls_target STRING, hms_namespace STRING,
+  discovered_at TIMESTAMP) USING DELTA;
+
+CREATE TABLE IF NOT EXISTS &lt;catalog&gt;.&lt;schema&gt;.demo_asset_inventory (
+  asset_type STRING, path STRING, name STRING, tier STRING,
+  hms_ref_count INT, seeded_at TIMESTAMP) USING DELTA;
+
+CREATE TABLE IF NOT EXISTS &lt;catalog&gt;.&lt;schema&gt;.migration_manifest (
+  manifest_id STRING, asset_type STRING, asset_path STRING, cell_index INT,
+  original_reference STRING, reference_kind STRING, proposed_replacement STRING,
+  confidence DOUBLE, status STRING, final_replacement STRING, reviewer STRING,
+  reviewed_at TIMESTAMP, applied_at TIMESTAMP, backup_path STRING,
+  scanned_at TIMESTAMP) USING DELTA;</code></pre>
+
+<h3>0.3 Pick your run mode</h3>
+<p>Every stage runs two ways. Choose per your workspace.</p>
+<table>
+  <tr><th>Mode</th><th>How</th><th>When</th></tr>
+  <tr><td>As workspace jobs</td><td><code>databricks bundle deploy -t dev</code> then <code>databricks bundle run hms_discovery -t dev</code></td><td>Production runs, scheduling, no local Python</td></tr>
+  <tr><td>Locally via the CLI profile</td><td><code>python3 scripts/jobs/stage1_discovery.py --profile &lt;profile&gt; ...</code></td><td>Iterating, evaluation, a controlled run from a laptop</td></tr>
+</table>
+<div class="callout note">
+  <b>Parameters every stage takes</b>
+  <code>--catalog</code>, <code>--schema</code>, and where relevant <code>--demo-root</code>, <code>--warehouse-id</code>, <code>--profile</code>. As a job, the same values come from the task parameters. Nothing environment-specific is hardcoded in the scripts. If <code>--warehouse-id</code> is omitted, the first available warehouse is used.
+</div>
+</section>
+
+<section id="step1">
+<h2 class="section"><span class="step-badge">1</span>Seed the mapping</h2>
+<p>Populate <code>hms_to_uc_mapping</code> with your HMS-to-UC answer key: one row per table you are migrating, and one row per mount point. In production this comes from your table-migration output; below is the manual form.</p>
+<pre><code>INSERT INTO &lt;catalog&gt;.&lt;schema&gt;.hms_to_uc_mapping VALUES
+ ('sales_db','transactions','analytics','sales','transactions', NULL, 'static table ref'),
+ ('finance_db','ledger','analytics','finance','ledger', NULL, 'static table ref'),
+ -- a mount row: hms_table NULL, mount_path set
+ ('sales_db', NULL, 'analytics','sales', NULL, '/mnt/sales-raw', 'mount resolves to sales_db');</code></pre>
+<div class="callout warn">
+  <b>Do not invent UC targets</b>
+  A reference with no mapping entry is scored low and routed to human review, never auto-resolved. Seed the mapping from your real table-migration output rather than guessing target names.
+</div>
+</section>
+
+<section id="step2">
+<h2 class="section"><span class="step-badge">2</span>(Optional) seed a demo estate</h2>
+<p>To trial the full flow before pointing it at real assets, seed a synthetic estate: notebooks across the three confidence tiers, plus dashboard query specs. The generator is non-PII and deterministic.</p>
+<pre><code>python3 scripts/setup/seed_demo_assets.py \
+  --profile &lt;profile&gt; --catalog &lt;catalog&gt; --schema &lt;schema&gt; \
+  --demo-root /Workspace/Shared/hms_uc_migration_demo/demo_notebooks \
+  --warehouse-id &lt;warehouse_id&gt;</code></pre>
+<p>Add <code>--local-only</code> to write the generated notebooks to disk without importing them, if you just want to inspect the fixtures first. This step also populates <code>demo_asset_inventory</code>.</p>
+</section>
+
+<section id="step3">
+<h2 class="section"><span class="step-badge">3</span>Discover</h2>
+<p>Inventory the assets in scope and the mount points. This writes <code>mount_point_registry</code> and confirms the asset list.</p>
+<pre><code>python3 scripts/jobs/stage1_discovery.py \
+  --profile &lt;profile&gt; --catalog &lt;catalog&gt; --schema &lt;schema&gt; \
+  --demo-root &lt;workspace_folder_to_scan&gt; --warehouse-id &lt;warehouse_id&gt;</code></pre>
+<p>For a real estate, point <code>--demo-root</code> at the workspace folder holding the team's notebooks. Verify the registry filled in:</p>
+<pre><code>SELECT mount_path, hms_namespace FROM &lt;catalog&gt;.&lt;schema&gt;.mount_point_registry ORDER BY mount_path;</code></pre>
+<div class="callout note">
+  <b>Mounts on serverless</b>
+  The job reads <code>dbutils.fs.mounts()</code> when available. On serverless that call is not available, so the job falls back to a configured mount set and logs that it did so. The fallback is never silent.
+</div>
+</section>
+
+<section id="step4">
+<h2 class="section"><span class="step-badge">4</span>Scan and propose</h2>
+<p>Read every inventoried asset, find each HMS reference, propose the UC replacement, and score confidence. This populates the <code>migration_manifest</code> with one <code>proposed</code> row per reference.</p>
+<pre><code>python3 scripts/jobs/stage2_scan_propose.py \
+  --profile &lt;profile&gt; --catalog &lt;catalog&gt; --schema &lt;schema&gt; \
+  --warehouse-id &lt;warehouse_id&gt;</code></pre>
+<p>The scanner is pure Python: <code>sqlglot</code> for SQL cells, the standard library <code>ast</code> for Python cells. It exports each notebook's source, finds references, cross-references the mount registry and mapping, and writes the manifest. Verify the spread across confidence tiers before reviewing:</p>
+<pre><code>SELECT
+  CASE WHEN confidence >= 0.85 THEN 'high'
+       WHEN confidence >= 0.45 THEN 'medium'
+       ELSE 'needs_judgement' END AS tier,
+  reference_kind, count(*) AS n
+FROM &lt;catalog&gt;.&lt;schema&gt;.migration_manifest
+GROUP BY 1, 2 ORDER BY 1, 2;</code></pre>
+<div class="callout note">
+  <b>Nothing is skipped silently</b>
+  References built at runtime (an f-string mount, a table name assembled from a variable) cannot be resolved statically. The scanner still records them, scored low, so they reach human review. A migration tool that silently skips what it cannot resolve is a tool that quietly breaks code.
+</div>
+</section>
+
+<section id="step5">
+<h2 class="section"><span class="step-badge">5</span>Review and approve</h2>
+<p>Proposals are routed by confidence so reviewers spend effort only where it is needed. There are three surfaces. Each writes <code>status</code> and <code>final_replacement</code> back to the manifest.</p>
+
+<h3>5a. High confidence: batch approve</h3>
+<p>Open <code>scripts/review/review_simple.py</code> as a notebook. It lists the high-confidence proposals; one cell approves the batch.</p>
+<pre><code>UPDATE &lt;catalog&gt;.&lt;schema&gt;.migration_manifest
+SET status='approved', final_replacement=proposed_replacement,
+    reviewer=current_user(), reviewed_at=current_timestamp()
+WHERE confidence >= 0.85 AND status='proposed';</code></pre>
+
+<h3>5b. Medium confidence: side-by-side review</h3>
+<p>Open <code>scripts/review/review_complex.py</code>. It renders an editable card per reference (original vs proposed) with Approve and Override buttons that write the row immediately.</p>
+
+<h3>5c. Needs judgement: guided review</h3>
+<p>For the ambiguous tier, open Genie Code on the row and use the <code>hms-migration-review</code> workspace skill (under <code>scripts/workspace_skill/</code>). It loads the manifest row, shows the source cell in context, enumerates candidate targets from the registry and mapping, and records your decision (<code>overridden</code>, or <code>skipped</code> if it should not migrate). It never sets a target you have not confirmed.</p>
+</section>
+
+<section id="step6">
+<h2 class="section"><span class="step-badge">6</span>Apply</h2>
+<p>Write the approved and overridden changes back into the assets. Every original is backed up to a UC Volume first, so every change is reversible. Only reviewed rows are touched.</p>
+<pre><code>python3 scripts/jobs/stage4_apply.py \
+  --profile &lt;profile&gt; --catalog &lt;catalog&gt; --schema &lt;schema&gt; \
+  --warehouse-id &lt;warehouse_id&gt;</code></pre>
+<p>For each affected notebook the job exports the source, backs it up to <code>/Volumes/&lt;catalog&gt;/&lt;schema&gt;/backups/</code>, replaces each <code>original_reference</code> with its <code>final_replacement</code>, re-imports the patched notebook, and stamps the manifest (<code>applied</code>, with <code>applied_at</code> and <code>backup_path</code>). Spot-check a patched asset:</p>
+<pre><code>-- before:  spark.read.table("sales_db.transactions")
+-- after:   spark.read.table("analytics.sales.transactions")</code></pre>
+<div class="callout proof">
+  <b>Reversible by construction</b>
+  Re-import overwrites the notebook, so the original is backed up first. To roll back, restore the file from its <code>backup_path</code> in the Volume.
+</div>
+</section>
+
+<section id="step7">
+<h2 class="section"><span class="step-badge">7</span>Validate and record</h2>
+<p>A migration that ran is not the same as a migration that is correct. This stage reconciles each migrated table before and after, flags any mismatch back to the manifest, and logs every review decision as an audit record.</p>
+<pre><code>python3 scripts/jobs/stage5_validate.py \
+  --profile &lt;profile&gt; --catalog &lt;catalog&gt; --schema &lt;schema&gt; \
+  --warehouse-id &lt;warehouse_id&gt; \
+  --experiment-path /Users/&lt;you&gt;/hms_uc_migration_audit</code></pre>
+<p>For each migrated table the job compares the pre-migration source and the UC target on row count and column set. A mismatch sets the related manifest rows to <code>failed</code>. Every reviewed decision is written as a tracking run (one per reference, plus a summary), so you have a queryable record of who approved what, at what confidence, and whether it reconciled. Check what failed:</p>
+<pre><code>SELECT asset_path, original_reference, final_replacement
+FROM &lt;catalog&gt;.&lt;schema&gt;.migration_manifest WHERE status='failed';</code></pre>
+</section>
+
+<section id="step8">
+<h2 class="section"><span class="step-badge">8</span>Iterate: fix here or extend the scanner</h2>
+<p>Some issues are a one-off edit; some mean the scanner will keep missing the same pattern across the estate. The decision is where to fix.</p>
+<table>
+  <tr><th>Situation</th><th>What to fix</th></tr>
+  <tr><td>One proposal is wrong for a reference unique to that asset</td><td>Override it in Step 5 (the review surface). Do not touch the scanner.</td></tr>
+  <tr><td>A reference pattern is consistently missed or mis-scored across assets</td><td>Extend the scanner. Add a failing test first, then the rule.</td></tr>
+</table>
+<p>The scanner is test-first. Add a case to <code>tests/test_scanner.py</code>, watch it fail, then extend <code>scripts/scanner/core.py</code> until green:</p>
+<pre><code>pytest tests/</code></pre>
+<div class="callout note">
+  <b>Why test-first matters here</b>
+  The scanner is pure Python with no Databricks dependency, so its rules are fully testable offline. Adding the test first proves the new rule catches what it should before you trust it against a real estate.
+</div>
+</section>
+
+<section id="step9">
+<h2 class="section"><span class="step-badge">9</span>Roll out across the estate</h2>
+<p>The same flow scales from one team to the whole estate. The recommended approach for a large estate:</p>
+<ol>
+  <li><b>Discovery-only first.</b> Run Stages 1 and 2 against one team's folder and read the manifest. You see the worklist and the confidence breakdown before anything is changed.</li>
+  <li><b>One namespace at a time.</b> Seed the mapping for that namespace, run the full flow, reconcile, then move to the next. The manifest is the running record across runs.</li>
+  <li><b>Batch the review.</b> The high-confidence tier clears in bulk; the team's reviewer only handles the medium and judgement tiers.</li>
+  <li><b>Keep the audit.</b> Every run adds to the tracking experiment, so program-level reporting (approval rate, override rate, failures) comes straight from the data.</li>
+</ol>
+<p class="small">To reset a trial between runs, re-run Stage 2 (it truncates and repopulates the manifest). Patched notebooks can be restored from the Volume backups or regenerated with the seed script.</p>
+</section>
+
+<section id="kinds">
+<h2 class="section">Reference kinds and scoring</h2>
+<p>Confidence is rule-based and explainable, never a black-box model. Every score maps to a reason a reviewer can read. The reference kinds the scanner emits, and how each scores:</p>
+<table>
+  <tr><th>Reference kind</th><th>Example</th><th>Typical score</th></tr>
+  <tr><td><code>sql_table_ref</code></td><td><code>SELECT ... FROM risk_db.exposures</code></td><td>0.95 if exact mapping hit</td></tr>
+  <tr><td><code>py_table_ref</code></td><td><code>spark.read.table("sales_db.transactions")</code></td><td>0.95 if exact mapping hit</td></tr>
+  <tr><td><code>mount_path_literal</code></td><td><code>spark.read.parquet("/mnt/sales-raw/2024")</code></td><td>0.90 if mount resolves</td></tr>
+  <tr><td><code>dynamic_mount</code></td><td><code>f"/mnt/{name}/daily"</code></td><td>0.70 (registry non-empty)</td></tr>
+  <tr><td><code>dynamic_table</code></td><td><code>spark.table(f"{db}.gl_accounts")</code></td><td>0.30 (built at runtime)</td></tr>
+  <tr><td>any</td><td>no mapping hit / unknown namespace</td><td>0.20</td></tr>
+</table>
+<p>Proposed replacements: table refs become <code>uc_catalog.uc_schema.uc_table</code>; mount literals become a UC Volumes path that preserves the sub-path; dynamic references carry no proposal and wait for the reviewer's target.</p>
+</section>
+
+<section id="routing">
+<h2 class="section">Review routing</h2>
+<table>
+  <tr><th>Confidence</th><th>Tier</th><th>Review surface</th></tr>
+  <tr><td>&#8805; 0.85</td><td>High</td><td><code>review_simple</code>: one UPDATE approves the batch</td></tr>
+  <tr><td>0.45 to 0.85</td><td>Medium</td><td><code>review_complex</code>: side-by-side, edit and approve or override</td></tr>
+  <tr><td>&lt; 0.45</td><td>Needs judgement</td><td>Genie Code <code>hms-migration-review</code> skill: guided, assisted override</td></tr>
+</table>
+<p>Tune the thresholds and per-rule scores in <code>scripts/scanner/core.py</code> (<code>propose</code> and <code>_tier</code>). Keep every rule explainable: each should map to a one-sentence justification.</p>
+</section>
+
+<section id="recon">
+<h2 class="section">Reconciliation layers</h2>
+<p>Stage 5 compares each migrated table's source and UC target. What each layer checks:</p>
+<table>
+  <tr><th>Layer</th><th>Question it answers</th><th>On mismatch</th></tr>
+  <tr><td>Row count</td><td>Do source and target have the same number of rows?</td><td>Manifest rows for that table set to <code>failed</code></td></tr>
+  <tr><td>Column set</td><td>Are the same columns present on both sides?</td><td>Manifest rows for that table set to <code>failed</code></td></tr>
+  <tr><td>Decision log</td><td>Who approved what, at what confidence, when?</td><td>One tracking run per decision, plus a summary</td></tr>
+</table>
+<table>
+  <tr><th>Result</th><th>Likely cause</th></tr>
+  <tr><td>Row count mismatch</td><td>The target table was not fully loaded, or a filter differs. This is a data-migration gap, not a code-patch gap.</td></tr>
+  <tr><td>Column missing on target</td><td>Target schema differs from source. Confirm the table migration completed.</td></tr>
+  <tr><td>Reference flagged but table looks fine</td><td>The patched reference points at the wrong target. Re-open the row in review and override.</td></tr>
+</table>
+</section>
+
+<section id="trouble">
+<h2 class="section">Troubleshooting</h2>
+
+<h3>SDK auth fails with "match ... use --profile to specify"</h3>
+<p>This happens when two CLI profiles share the same workspace host. Select the profile with the environment variable rather than the SDK keyword: <code>DATABRICKS_CONFIG_PROFILE=&lt;profile&gt; python3 scripts/jobs/stage1_discovery.py ...</code>. The stage scripts already do this when you pass <code>--profile</code>.</p>
+
+<h3>Discovery finds no mounts</h3>
+<p>On serverless, <code>dbutils.fs.mounts()</code> is unavailable, so the job uses a configured mount set and logs the fallback. Seed <code>mount_point_registry</code> from your known mounts, or configure the fallback set in <code>scripts/jobs/stage1_discovery.py</code>.</p>
+
+<h3>Apply cannot write the backup</h3>
+<p>The backup Volume must exist. The apply job creates it (<code>CREATE VOLUME IF NOT EXISTS &lt;catalog&gt;.&lt;schema&gt;.backups</code>); if that fails, check the run-as identity has <code>CREATE VOLUME</code> and write rights on the schema.</p>
+
+<h3>No external network in the workspace</h3>
+<p>The whole flow runs in-workspace with no external egress. The only external need is the Python packages (<code>sqlglot</code>, <code>databricks-sdk</code>, <code>mlflow</code>, <code>ipywidgets</code>); install them from your internal package proxy or pre-bundled wheels. No stage makes an outbound call.</p>
+
+<h3>A reference was patched incorrectly</h3>
+<p>Restore the asset from its <code>backup_path</code> in the Volume, re-open the manifest row in the review surface, override it with the correct target, and re-run Apply for that row.</p>
+</section>
+
+<section id="faq">
+<h2 class="section">FAQ</h2>
+<h3>Does this move my data or migrate my tables?</h3>
+<p>No. It patches the code and dashboards that reference tables. Migrating the tables, grants, and metastore objects is the other half of UC migration, handled by your table-migration tooling. This toolkit complements it.</p>
+<h3>Is every change reversible?</h3>
+<p>Yes. Apply backs up each original to a UC Volume before patching, and re-import is overwrite, so you can restore any asset from its backup.</p>
+<h3>What about dashboards?</h3>
+<p>The scanner and manifest model dashboard queries as a reference kind, and the discovery step inventories dashboards. Notebook references are patched today; dashboard-query patching is the same pattern (extract query, scan, propose, apply) and extends from the same code.</p>
+<h3>Can it run with no internet access?</h3>
+<p>Yes. Everything runs inside the workspace. The only outside dependency is the Python packages, which you install from an internal proxy or bundled wheels.</p>
+<h3>How do I trust the confidence scores?</h3>
+<p>They are deterministic rules, not a model. Every score maps to a stated reason (see Reference kinds and scoring), and nothing below 0.85 is applied without a human approving it.</p>
+</section>
+
+<section id="keyfiles">
+<h2 class="section">Key files</h2>
+<table>
+  <tr><th>File</th><th>Purpose</th><th>Do you edit it?</th></tr>
+  <tr><td><code>scripts/jobs/stage1_discovery.py</code></td><td>Stage 1: inventory assets and mounts</td><td>Only the mount fallback set, if needed</td></tr>
+  <tr><td><code>scripts/jobs/stage2_scan_propose.py</code></td><td>Stage 2: scan and write the manifest</td><td>No</td></tr>
+  <tr><td><code>scripts/scanner/core.py</code></td><td>The scanner: extraction rules and scoring</td><td>Yes, to extend reference handling</td></tr>
+  <tr><td><code>scripts/review/review_simple.py</code></td><td>Stage 3: high-confidence batch approve</td><td>No</td></tr>
+  <tr><td><code>scripts/review/review_complex.py</code></td><td>Stage 3: side-by-side review and override</td><td>No</td></tr>
+  <tr><td><code>scripts/workspace_skill/hms-migration-review/</code></td><td>Stage 3: Genie Code skill for the judgement tier</td><td>Yes, as patterns appear</td></tr>
+  <tr><td><code>scripts/jobs/stage4_apply.py</code></td><td>Stage 4: back up, patch, re-import</td><td>No</td></tr>
+  <tr><td><code>scripts/jobs/stage5_validate.py</code></td><td>Stage 5: reconcile and log decisions</td><td>No</td></tr>
+  <tr><td><code>scripts/setup/seed_demo_assets.py</code></td><td>Generate a synthetic estate for a trial</td><td>No</td></tr>
+  <tr><td><code>tests/test_scanner.py</code></td><td>Scanner rule tests (test-first)</td><td>Yes, add a case before extending the scanner</td></tr>
+  <tr><td><code>databricks.yml</code></td><td>Bundle config: the five stage jobs</td><td>Yes, the target/workspace block</td></tr>
+</table>
+</section>
+
+<div class="footer">
+  <p>Hive Metastore to Unity Catalog user-asset migration toolkit. Operational runbook. Commands shown use placeholders (<code>&lt;catalog&gt;</code>, <code>&lt;schema&gt;</code>, <code>&lt;profile&gt;</code>, <code>&lt;warehouse_id&gt;</code>); substitute your own. Example table and mount names are illustrative. Contains no environment-specific configuration, credentials, or personal data.</p>
+</div>
+</main>
+</div>
+</body>
+</html>
